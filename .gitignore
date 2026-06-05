@@ -1,0 +1,18 @@
+# VS Code
+.vscode/
+
+# ROS / colcon generated folders
+**/build/
+**/install/
+**/log/
+
+# Python
+__pycache__/
+*.pyc
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# local notes
+CAPTURE_PROCEDURE.md
