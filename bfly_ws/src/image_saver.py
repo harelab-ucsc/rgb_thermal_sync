@@ -1,62 +1,84 @@
 #!/usr/bin/env python3
 
-import os
+import queue
+import threading
 from pathlib import Path
 
+import cv2
+import numpy as np
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
-import cv2
+
+OUTPUT_DIR = Path.home() / 'bfs_images'
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+WRITE_QUEUE_MAXSIZE = 60  # 10 s headroom at 6 Hz
+
+
+def writer_worker(q: queue.Queue, stop_event: threading.Event):
+    while not stop_event.is_set() or not q.empty():
+        try:
+            path, frame = q.get(timeout=0.5)
+        except queue.Empty:
+            continue
+        cv2.imwrite(str(path), frame)
+        q.task_done()
 
 
 class ImageSaver(Node):
-    def __init__(self):
+    def __init__(self, write_q: queue.Queue):
         super().__init__('image_saver')
+        self.bridge  = CvBridge()
+        self.write_q = write_q
+        self.count   = 0
+        self.dropped = 0
 
-        self.bridge = CvBridge()
-
-        self.output_dir = Path.home() / 'bfs_images'
-        self.output_dir.mkdir(parents=True, exist_ok=True)
-
-        self.count = 0
-
+        # Large queue so executor doesnt stalls waiting for disk
         self.subscription = self.create_subscription(
-            Image,
-            '/camera/image_raw',
-            self.image_callback,
-            10
+            Image, '/camera/image_raw', self.image_callback, 60
         )
-
-        self.get_logger().info(f'Saving images to: {self.output_dir}')
+        self.get_logger().info(f'Saving frames to: {OUTPUT_DIR}')
 
     def image_callback(self, msg: Image):
+        frame = self.bridge.imgmsg_to_cv2(msg, desired_encoding='passthrough')
+        frame = np.asarray(frame)
+
+        stamp_sec  = msg.header.stamp.sec
+        stamp_nsec = msg.header.stamp.nanosec
+        path = OUTPUT_DIR / f'frame_{stamp_sec}_{stamp_nsec}.png'
+
         try:
-            # Keep original encoding when possible
-            frame = self.bridge.imgmsg_to_cv2(msg, desired_encoding='passthrough')
-
-            # Use ROS timestamp in filename
-            stamp_sec = msg.header.stamp.sec
-            stamp_nsec = msg.header.stamp.nanosec
-            filename = self.output_dir / f'frame_{stamp_sec}_{stamp_nsec}.png'
-
-            # If mono16, PNG can store it
-            cv2.imwrite(str(filename), frame)
-
+            self.write_q.put_nowait((path, frame))
             self.count += 1
-            if self.count % 30 == 0:
-                self.get_logger().info(f'Saved {self.count} images')
+        except queue.Full:
+            self.dropped += 1
 
-        except Exception as e:
-            self.get_logger().error(f'Failed to save image: {e}')
+        total = self.count + self.dropped
+        if total % 6 == 0:
+            self.get_logger().info(
+                f'Saved {self.count} | dropped {self.dropped} | '
+                f'queue {self.write_q.qsize()}'
+            )
 
 
 def main(args=None):
     rclpy.init(args=args)
-    node = ImageSaver()
+
+    write_q    = queue.Queue(maxsize=WRITE_QUEUE_MAXSIZE)
+    stop_event = threading.Event()
+    writer     = threading.Thread(
+        target=writer_worker, args=(write_q, stop_event), daemon=True
+    )
+    writer.start()
+
+    node = ImageSaver(write_q)
     try:
         rclpy.spin(node)
     finally:
+        stop_event.set()
+        writer.join()
         node.destroy_node()
         rclpy.shutdown()
 
