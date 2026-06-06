@@ -11,7 +11,7 @@ from rclpy.node import Node
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
 
-OUTPUT_DIR = Path.home() / 'bfs_images'
+OUTPUT_DIR = Path.home() / 'dataset' / 'bfs_images'
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 WRITE_QUEUE_MAXSIZE = 60  # 10 s headroom at 6 Hz
