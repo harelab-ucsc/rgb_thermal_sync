@@ -13,7 +13,7 @@ EXT_SYNC_DISABLE = 0
 EXT_SYNC_MASTER  = 1
 EXT_SYNC_SLAVE   = 2
 
-RAW_DIR = Path("boson_capture/raw")
+RAW_DIR = Path.home() / 'dataset' / 'boson_capture' / 'raw'
 RAW_DIR.mkdir(parents=True, exist_ok=True)
 
 WRITE_QUEUE_MAXSIZE = 180  # 3 s headroom at 60 Hz
@@ -38,13 +38,27 @@ def main():
     writer.start()
 
     try:
-        # MASTER mode: Boson outputs 60 Hz sync pulse on VPC3 → STM32 PA0 counts it
-        cam.set_external_sync_mode(EXT_SYNC_MASTER)
-        time.sleep(0.2)
-        print(f"External sync mode: {cam.get_external_sync_mode()} (1 = master)")
+        # Find the Boson video device index (e.g. 32 for /dev/video32)
+        device_id = cam.find_video_device()
+        if device_id is None:
+            raise RuntimeError("Boson video device not found")
 
-        cam.setup_video()
-        cam.cap.set(cv2.CAP_PROP_FPS, 60)  # ask V4L2 for 60 fps explicitly
+        cam.cap = cv2.VideoCapture(
+            device_id, cv2.CAP_V4L2,
+            [cv2.CAP_PROP_FPS,          60,
+             cv2.CAP_PROP_FOURCC,        cv2.VideoWriter_fourcc(*'Y16 '),
+             cv2.CAP_PROP_CONVERT_RGB,   0]
+        )
+        if not cam.cap.isOpened():
+            raise RuntimeError(f"Failed to open /dev/video{device_id}")
+        print(f"V4L2 negotiated FPS: {cam.cap.get(cv2.CAP_PROP_FPS)}")
+
+        print(f"Averager state: {cam.get_averager()} (0=off, 1=on)")
+
+        # SLAVE mode: Boson follows 60 Hz sync signal driven by STM32 PA8 on VPC3
+        cam.set_external_sync_mode(EXT_SYNC_SLAVE)
+        time.sleep(0.2)
+        print(f"External sync mode: {cam.get_external_sync_mode()} (2 = slave)")
 
         print(f"Saving to: {RAW_DIR.resolve()}")
         print("Capturing — Ctrl+C to stop")
