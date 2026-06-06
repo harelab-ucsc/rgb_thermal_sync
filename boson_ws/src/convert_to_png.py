@@ -11,8 +11,8 @@ import cv2
 import numpy as np
 
 
-INPUT_DIR  = Path("boson_capture/raw")
-OUTPUT_DIR = Path("boson_capture/png")
+INPUT_DIR  = Path.home() / 'dataset' / 'boson_capture' / 'raw'
+OUTPUT_DIR = Path.home() / 'dataset' / 'boson_capture' / 'png'
 
 
 def crop_telemetry(frame: np.ndarray) -> np.ndarray:
