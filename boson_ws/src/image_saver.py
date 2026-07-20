@@ -132,7 +132,10 @@ def main():
         except Exception:
             pass
         elapsed = time.monotonic() - t0
-        print(f"Done. {saved_count} saved, {dropped_count} dropped. Avg FPS: {frame_idx / elapsed:.1f}")
+        print(
+            f"Done. {saved_count} saved, {dropped_count} dropped, "
+            f"{duplicate_count} duplicate. Avg FPS: {frame_idx / elapsed:.1f}"
+        )
 
 
 if __name__ == "__main__":
