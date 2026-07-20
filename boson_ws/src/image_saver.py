@@ -13,6 +13,8 @@ EXT_SYNC_DISABLE = 0
 EXT_SYNC_MASTER  = 1
 EXT_SYNC_SLAVE   = 2
 
+GAIN_MODE_NAMES = {0: "HIGH_GAIN", 1: "LOW_GAIN", 2: "AUTO_GAIN", 3: "DUAL_GAIN", 4: "MANUAL_GAIN"}
+
 RAW_DIR = Path.home() / 'dataset' / 'boson_capture' / 'raw'
 RAW_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -53,7 +55,21 @@ def main():
             raise RuntimeError(f"Failed to open /dev/video{device_id}")
         print(f"V4L2 negotiated FPS: {cam.cap.get(cv2.CAP_PROP_FPS)}")
 
-        print(f"Averager state: {cam.get_averager()} (0=off, 1=on)")
+        averager = cam.get_averager()
+        print(f"Averager state: {averager} (0=off, 1=on)")
+        if averager == 1:
+            print("WARNING: smart averager is ON -- each frame is a temporal blend of "
+                  "several sensor frames, not one true instantaneous sample. This also "
+                  "weakens the frame-to-frame sync this rig depends on. Disabling it "
+                  "requires disconnecting/reconnecting the camera after set_averager(0).")
+
+        gain_mode = cam.get_gain_mode()
+        print(f"Gain mode: {gain_mode} ({GAIN_MODE_NAMES.get(gain_mode, 'UNKNOWN')})")
+        if gain_mode == 2:
+            print("WARNING: gain mode is AUTO_GAIN -- the camera may switch gain tables "
+                  "mid-session, changing the linear count-to-flux scale partway through "
+                  "a capture. Set a fixed gain mode (set_gain_mode) if you need one "
+                  "consistent radiometric scale across the whole session.")
 
         # SLAVE mode: Boson follows 60 Hz sync signal driven by STM32 PA8 on VPC3
         cam.set_external_sync_mode(EXT_SYNC_SLAVE)
@@ -82,6 +98,15 @@ def main():
 
             if frame.ndim == 1:
                 n = frame.size
+                if frame_idx == 0:
+                    if n == 640 * 514:
+                        print("Telemetry rows: present (640x514) -- FFC state/gain mode/frame "
+                              "counter are recoverable per frame.")
+                    elif n == 640 * 512:
+                        print("WARNING: telemetry rows NOT present (640x512) -- per-frame FFC "
+                              "state, gain mode, and frame counter cannot be recovered from "
+                              "these files. Enable the telemetry line on the camera if you "
+                              "need that provenance.")
                 if   n == 640 * 512: frame = frame.reshape((512, 640))
                 elif n == 640 * 514: frame = frame.reshape((514, 640))
                 else: continue
