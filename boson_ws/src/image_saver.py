@@ -117,7 +117,8 @@ def main():
                 fps = frame_idx / (time.monotonic() - t0)
                 print(
                     f"FPS: {fps:.1f} | grabbed {frame_idx} | saved {saved_count} | "
-                    f"dropped {dropped_count} | empty {empty_count} | queue {write_q.qsize()}"
+                    f"dropped {dropped_count} | duplicate {duplicate_count} | "
+                    f"empty {empty_count} | queue {write_q.qsize()}"
                 )
 
     except KeyboardInterrupt:
