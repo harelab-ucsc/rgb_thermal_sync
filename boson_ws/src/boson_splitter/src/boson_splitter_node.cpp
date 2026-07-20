@@ -74,13 +74,16 @@ private:
     const uint8_t* status_ptr = msg->data.data();
 
 
-    // Sanity-check sync word (big-endian, expect 0x0FF0)
-    uint16_t sync = static_cast<uint16_t>((status_ptr[0] << 8) | status_ptr[1]);
-    RCLCPP_INFO_ONCE(get_logger(), "Telemetry row A sync word: 0x%04X (expect 0x0FF0)", sync);
-    if (sync != 0x0200) {
+    // Word 0 of the telemetry line is the Telemetry Revision field (FLIR Boson
+    // datasheet Table 5): documented values are 1 (Release 1), 2 (Release 2),
+    // 3 (Release 3). It is not a sync/magic marker.
+    uint16_t telemetry_revision = static_cast<uint16_t>((status_ptr[0] << 8) | status_ptr[1]);
+    RCLCPP_INFO_ONCE(get_logger(), "Telemetry revision: %u", telemetry_revision);
+    if (telemetry_revision < 1 || telemetry_revision > 3) {
       RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000,
-                           "Unexpected telemetry sync word: 0x%04X (expect 0x0FF0) -- "
-                           "telemetry decoding may be unreliable", sync);
+                           "Unexpected telemetry revision: %u (0x%04X) -- expected 1-3 per "
+                           "FLIR Boson datasheet Table 5 -- telemetry decoding may be unreliable",
+                           telemetry_revision, telemetry_revision);
     }
 
     // 1) Publish cropped 640x512 mono16 (rows after the 2 telemetry rows)
