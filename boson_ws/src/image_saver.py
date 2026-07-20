@@ -67,6 +67,8 @@ def main():
         saved_count   = 0
         empty_count   = 0
         dropped_count = 0
+        duplicate_count = 0
+        last_frame_counter = None
         t0 = time.monotonic()
 
         while True:
@@ -86,6 +88,19 @@ def main():
 
             if frame.dtype != np.uint16:
                 frame = frame.astype(np.uint16)
+
+            try:
+                frame_counter = cam.get_frame_count()
+            except Exception:
+                frame_counter = None
+
+            # Skip duplicated frames if the camera's frame counter didn't advance
+            if frame_counter is not None and last_frame_counter is not None:
+                if frame_counter == last_frame_counter:
+                    duplicate_count += 1
+                    continue
+
+            last_frame_counter = frame_counter
 
             ts = time.time_ns()
             path = RAW_DIR / f"boson_{frame_idx:010d}_{ts}.npy"
